@@ -4,6 +4,17 @@
 #include <sys/time.h>
 #include <math.h>
 
+// #define SCHEDULER_TYPE static
+// #define SCHEDULER_TYPE dynamic
+#define SCHEDULER_TYPE guided
+// #define CHUNK_SIZE 1
+// #define CHUNK_SIZE 1000
+// #define CHUNK_SIZE 50000
+// #define CHUNK_SIZE 100000
+// #define CHUNK_SIZE 250000
+// #define CHUNK_SIZE 450000
+#define CHUNK_SIZE 570000
+
 void fill_array(double *arr, int size, double left, double right, unsigned int *seedp)
 {
 	int i;
@@ -25,6 +36,7 @@ void print_array(double *arr, int size)
 void map_m1(double *arr, int size)
 {
 	int i;
+	#pragma omp parallel for default(none) private(i) shared(arr, size) schedule(SCHEDULER_TYPE, CHUNK_SIZE)
 	for (i = 0; i < size; i++) {
 		arr[i] = tanh(arr[i]) - 1;
 	}
@@ -33,6 +45,7 @@ void map_m1(double *arr, int size)
 void map_m2(double *arr, int size, double *arr_copy)
 {
 	int i;
+	#pragma omp parallel for default(none) private(i) shared(arr, arr_copy, size) schedule(SCHEDULER_TYPE, CHUNK_SIZE)
 	for (i = 0; i < size; i++) {
 		double prev = 0;
 		if (i > 0)
@@ -44,6 +57,7 @@ void map_m2(double *arr, int size, double *arr_copy)
 void copy_arr(double *src, int len, double *dst)
 {
 	int i;
+	#pragma omp parallel for default(none) private(i) shared(src, dst, len) schedule(SCHEDULER_TYPE, CHUNK_SIZE)
 	for (i = 0; i < len; i++)
 		dst[i] = src[i];
 }
@@ -51,6 +65,7 @@ void copy_arr(double *src, int len, double *dst)
 void apply_merge_func(double *m1, double *m2, int m2_len)
 {
 	int i;
+	#pragma omp parallel for default(none) private(i) shared(m1, m2, m2_len) schedule(SCHEDULER_TYPE, CHUNK_SIZE)
 	for (i = 0; i < m2_len; i++) {
 		m2[i] = fabs(m1[i] - m2[i]);
 	}
@@ -113,9 +128,12 @@ double reduce(double *arr, int len)
 	int i;
 	double min_val = min_not_null(arr, len);
 	double x = 0;
+	#pragma omp parallel for default(none) private(i) shared(arr, len, min_val) reduction(+:x) schedule(SCHEDULER_TYPE, CHUNK_SIZE)
 	for (i = 0; i < len; i++) {
-		if ((int)(arr[i] / min_val) % 2 == 0)
-			x += sin(arr[i]);
+		if ((int)(arr[i] / min_val) % 2 == 0) {
+			double sin_val = sin(arr[i]);
+			x += sin_val;
+		}
 	}
 	return x;
 }
@@ -128,7 +146,7 @@ int main(int argc, char* argv[])
 	double *M1, *M2, *M2_copy;
 	int A = 540;
 	unsigned int seed1, seed2;
-	double X;
+	// double X;
 
 	N = atoi(argv[1]); /* N равен первому параметру командной строки */
 	gettimeofday(&T1, NULL); /* запомнить текущее время T1 */
@@ -137,7 +155,7 @@ int main(int argc, char* argv[])
 	M2 = malloc(sizeof(double) * N / 2);
 	M2_copy = malloc(sizeof(double) * N / 2);
 
-	for (i = 0; i < 5; i++) /* 50 экспериментов */
+	for (i = 0; i < 50; i++) /* 50 экспериментов */
 	{
 		seed1 = i;
 		seed2 = i;
@@ -164,8 +182,8 @@ int main(int argc, char* argv[])
 		// printf("Sort\n");
 		// print_array(M2, N / 2);
 
-		X = reduce(M2, N / 2);
-		printf("X = %f\n", X);
+		reduce(M2, N / 2);
+		// printf("X = %f\n", X);
 	}
 	gettimeofday(&T2, NULL); /* запомнить текущее время T2 */
 
